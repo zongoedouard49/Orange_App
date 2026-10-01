@@ -1,0 +1,29 @@
+{
+  "services": [
+    "DRSI",
+    "Marketing",
+    "CX",
+    "Legal",
+    "OM",
+    "Direction Informatique",
+    "Direction Ressources Humaines"
+  ],
+  "plateformes": [
+    "Wallis",
+    "42Crunch",
+    "Plateforme 1",
+    "Plateforme 2",
+    "Plateforme 3",
+    "Plateforme 4",
+    "WhatsApp",
+    "Teams"
+  ],
+  "partenaires": [
+    "Partenaire 1",
+    "Partenaire 2",
+    "Partenaire 3",
+    "Partenaire 4",
+    "Entreprise ACME",
+    "Partenaire XYZ"
+  ]
+}
