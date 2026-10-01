@@ -9,6 +9,7 @@ import {
   Plus,
   Trash2,
   Download,
+  FolderDown,
   Loader2,
   RefreshCw,
   FileText,
@@ -156,6 +157,8 @@ export default function AdminPanel() {
   const [loadingRapport, setLoadingRapport] = useState(false);
   const [rapportError, setRapportError] = useState("");
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingParDir, setIsExportingParDir] = useState(false);
+  const [exportDirProgress, setExportDirProgress] = useState<string>("");
 
   // Logs connexions
   const [logFilterCuid, setLogFilterCuid] = useState("");
@@ -386,6 +389,59 @@ export default function AdminPanel() {
     } catch (error) {
       setRapportError(error instanceof Error ? error.message : "Export impossible.");
     } finally { setIsExporting(false); }
+  };
+
+  const exportParDirection = async () => {
+    const directions = allData.services || [];
+    if (directions.length === 0) {
+      setRapportError("Aucune direction disponible pour l'export.");
+      return;
+    }
+    // Demande du dossier de sauvegarde via l'API File System Access
+    let dirHandle: FileSystemDirectoryHandle;
+    try {
+      dirHandle = await (window as any).showDirectoryPicker({ mode: "readwrite" });
+    } catch {
+      // L'utilisateur a annulé la sélection du dossier
+      return;
+    }
+    setIsExportingParDir(true);
+    setRapportError("");
+    setExportDirProgress("");
+    let errors: string[] = [];
+    for (let i = 0; i < directions.length; i++) {
+      const dir = directions[i];
+      setExportDirProgress(`Export direction ${i + 1}/${directions.length} : ${dir}…`);
+      try {
+        const params = new URLSearchParams();
+        params.set("direction", dir);
+        if (filterStatut) params.set("statut", filterStatut);
+        if (filterCuid) params.set("cuid", filterCuid);
+        if (filterPlateforme) params.set("plateforme", filterPlateforme);
+        const response = await fetch(`${API_ROUTES.rapportExport}?${params}`, { headers: getAuthHeaders() });
+        if (response.status === 401) { sessionStorage.removeItem("admin_token"); window.location.href = "/admin"; return; }
+        if (!response.ok) { const raw = await response.text().catch(() => ""); throw new Error(parseRawError(raw, response.status)); }
+        const blob = await response.blob();
+        // Nom de fichier : direction_YYYYMMDD.xlsx (caractères spéciaux remplacés)
+        const safeName = dir.replace(/[/\\?%*:|"<>]/g, "_");
+        const dateStr = new Date().toISOString().split("T")[0].replace(/-/g, "");
+        const fileName = `${safeName}_${dateStr}.xlsx`;
+        const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+      } catch (err) {
+        errors.push(`${dir} : ${err instanceof Error ? err.message : "Erreur inconnue"}`);
+      }
+    }
+    setIsExportingParDir(false);
+    if (errors.length > 0) {
+      setRapportError(`Export terminé avec ${errors.length} erreur(s) :\n${errors.join("\n")}`);
+      setExportDirProgress("");
+    } else {
+      setExportDirProgress(`✓ ${directions.length} fichier(s) exporté(s) avec succès.`);
+      setTimeout(() => setExportDirProgress(""), 5000);
+    }
   };
 
   // Logs connexions
@@ -937,9 +993,32 @@ export default function AdminPanel() {
               )}
             </div>
 
-            <div className="flex justify-end">
-              <button onClick={exportExcel} disabled={isExporting || rapportTotal === 0} className="flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-md hover:bg-primary/90 disabled:opacity-60">
-                {isExporting ? <><Loader2 className="h-4 w-4 animate-spin" /> Export en cours...</> : <><Download className="h-4 w-4" /> Exporter en Excel</>}
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              {/* Message de progression export par direction */}
+              {exportDirProgress && (
+                <span className={`text-sm font-medium ${exportDirProgress.startsWith("✓") ? "text-green-600" : "text-muted-foreground"}`}>
+                  {exportDirProgress}
+                </span>
+              )}
+              {/* Bouton export tout (filtre actuel) */}
+              <button
+                onClick={exportExcel}
+                disabled={isExporting || isExportingParDir || rapportTotal === 0}
+                className="flex items-center gap-2 rounded-lg border border-primary bg-background px-5 py-2.5 text-sm font-semibold text-primary shadow-sm hover:bg-primary/5 disabled:opacity-60"
+              >
+                {isExporting ? <><Loader2 className="h-4 w-4 animate-spin" /> Export en cours…</> : <><Download className="h-4 w-4" /> Exporter en Excel</>}
+              </button>
+              {/* Bouton export par direction */}
+              <button
+                onClick={exportParDirection}
+                disabled={isExportingParDir || isExporting || (allData.services || []).length === 0}
+                title="Génère un fichier Excel par direction et les enregistre dans un dossier de votre choix"
+                className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-md hover:bg-primary/90 disabled:opacity-60"
+              >
+                {isExportingParDir
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Export en cours…</>
+                  : <><FolderDown className="h-4 w-4" /> Exporter par direction</>
+                }
               </button>
             </div>
           </div>
